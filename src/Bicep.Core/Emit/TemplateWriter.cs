@@ -31,12 +31,12 @@ namespace Bicep.Core.Emit
             "metadata"
         }.ToImmutableArray();
 
-        private static ImmutableHashSet<string> ResourcePropertiesToOmit = new [] {
+        private static readonly ImmutableHashSet<string> ResourcePropertiesToOmit = new [] {
             LanguageConstants.ResourceScopePropertyName,
             LanguageConstants.ResourceDependsOnPropertyName,
         }.ToImmutableHashSet();
 
-        private static ImmutableHashSet<string> ModulePropertiesToOmit = new [] {
+        private static readonly ImmutableHashSet<string> ModulePropertiesToOmit = new [] {
             LanguageConstants.ModuleParamsPropertyName,
             LanguageConstants.ResourceScopePropertyName,
             LanguageConstants.ResourceDependsOnPropertyName,

@@ -186,6 +186,7 @@ namespace Bicep.Core.Emit
                         // the named copy index in the serialized expression is incorrect
                         // because the object syntax here does not match the JSON equivalent due to the presence of { "value": ... } wrappers
                         // for now, we will manually replace the copy index in the converted expression
+                        // this also will not work for nested property loops
                         var visitor = new LanguageExpressionVisitor
                         {
                             OnFunctionExpression = function =>
