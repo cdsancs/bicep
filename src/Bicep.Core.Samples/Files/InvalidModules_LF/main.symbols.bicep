@@ -417,7 +417,8 @@ module missingFewerLoopBodyProperties 'modulea.bicep' = [for x in emptyArray:{
 // wrong parameter in the module loop
 module wrongModuleParameterInLoop 'modulea.bicep' = [for x in emptyArray:{
 //@[57:58) Local x. Type: any. Declaration start char: 57, length: 1
-//@[7:33) Module wrongModuleParameterInLoop. Type: module[]. Declaration start char: 0, length: 222
+//@[7:33) Module wrongModuleParameterInLoop. Type: module[]. Declaration start char: 0, length: 263
+  // #completionTest(17) -> symbolsPlusX
   name: 'hello-${x}'
   params: {
     arrayParam: []
@@ -443,88 +444,3 @@ module nonexistentArrays 'modulea.bicep' = [for evenMoreDuplicates in alsoDoesNo
   }
 }]
 
-/*
-  valid loop - this should be moved to Modules_* test case after E2E works
-*/ 
-var myModules = [
-//@[4:13) Variable myModules. Type: array. Declaration start char: 0, length: 114
-  {
-    name: 'one'
-    location: 'eastus2'
-  }
-  {
-    name: 'two'
-    location: 'westus'
-  }
-]
-
-// duplicate identifiers across scopes are allowed (inner hides the outer)
-module duplicateIdentifiersWithinLoop 'modulea.bicep' = [for x in emptyArray:{
-//@[61:62) Local x. Type: any. Declaration start char: 61, length: 1
-//@[7:37) Module duplicateIdentifiersWithinLoop. Type: module[]. Declaration start char: 0, length: 226
-  name: 'hello-${x}'
-  params: {
-    objParam: {}
-    stringParamA: 'test'
-    stringParamB: 'test'
-    arrayParam: [for x in emptyArray: y]
-//@[21:22) Local x. Type: any. Declaration start char: 21, length: 1
-  }
-}]
-
-// duplicate identifiers across scopes are allowed (inner hides the outer)
-var duplicateAcrossScopes = 'hello'
-//@[4:25) Variable duplicateAcrossScopes. Type: 'hello'. Declaration start char: 0, length: 35
-module duplicateInGlobalAndOneLoop 'modulea.bicep' = [for duplicateAcrossScopes in []: {
-//@[58:79) Local duplicateAcrossScopes. Type: any. Declaration start char: 58, length: 21
-//@[7:34) Module duplicateInGlobalAndOneLoop. Type: module[]. Declaration start char: 0, length: 256
-  name: 'hello-${duplicateAcrossScopes}'
-  params: {
-    objParam: {}
-    stringParamA: 'test'
-    stringParamB: 'test'
-    arrayParam: [for x in emptyArray: x]
-//@[21:22) Local x. Type: any. Declaration start char: 21, length: 1
-  }
-}]
-
-var someDuplicate = true
-//@[4:17) Variable someDuplicate. Type: bool. Declaration start char: 0, length: 24
-var otherDuplicate = false
-//@[4:18) Variable otherDuplicate. Type: bool. Declaration start char: 0, length: 26
-module duplicatesEverywhere 'modulea.bicep' = [for someDuplicate in []: {
-//@[51:64) Local someDuplicate. Type: any. Declaration start char: 51, length: 13
-//@[7:27) Module duplicatesEverywhere. Type: module[]. Declaration start char: 0, length: 256
-  name: 'hello-${someDuplicate}'
-  params: {
-    objParam: {}
-    stringParamB: 'test'
-    arrayParam: [for otherDuplicate in emptyArray: '${someDuplicate}-${otherDuplicate}']
-//@[21:35) Local otherDuplicate. Type: any. Declaration start char: 21, length: 14
-  }
-}]
-
-// simple module loop
-module storageResources 'modulea.bicep' = [for module in myModules: {
-//@[47:53) Local module. Type: any. Declaration start char: 47, length: 6
-//@[7:23) Module storageResources. Type: module[]. Declaration start char: 0, length: 182
-  name: module.name
-  params: {
-    arrayParam: []
-    objParam: module
-    stringParamB: module.location
-  }
-}]
-
-// nested module loop
-module nestedModuleLoop 'modulea.bicep' = [for module in myModules: {
-//@[47:53) Local module. Type: any. Declaration start char: 47, length: 6
-//@[7:23) Module nestedModuleLoop. Type: module[]. Declaration start char: 0, length: 220
-  name: module.name
-  params: {
-    arrayParam: [for i in range(0,3): concat('test', i)]
-//@[21:22) Local i. Type: any. Declaration start char: 21, length: 1
-    objParam: module
-    stringParamB: module.location
-  }
-}]

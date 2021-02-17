@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using Azure.Deployments.Expression.Expressions;
 using Bicep.Core.Extensions;
+using Bicep.Core.Resources;
 using Bicep.Core.Semantics;
 using Bicep.Core.Syntax;
 using Bicep.Core.TypeSystem;
@@ -238,7 +239,6 @@ namespace Bicep.Core.Emit
 
         private void EmitVariable(VariableSymbol variableSymbol)
         {
-            // TODO: When we have expressions, only expressions without runtime functions can be emitted this way. Everything else will need to be inlined.
             this.emitter.EmitExpression(variableSymbol.Value);
         }
 
@@ -269,12 +269,25 @@ namespace Bicep.Core.Emit
         {
             writer.WriteStartObject();
 
-            var typeReference = EmitHelpers.GetTypeReference(resourceSymbol);
-            var body = resourceSymbol.DeclaringResource.Value;
+            ResourceTypeReference? typeReference;
+            SyntaxBase body = resourceSymbol.DeclaringResource.Value;
             if (body is IfConditionSyntax ifCondition)
             {
                 body = ifCondition.Body;
+                typeReference = EmitHelpers.GetSingleResourceTypeReference(resourceSymbol);
+
                 this.emitter.EmitProperty("condition", ifCondition.ConditionExpression);
+            }
+            else if (body is ForSyntax @for)
+            {
+                body = @for.Body;
+                typeReference = EmitHelpers.GetResourceCollectionTypeReference(resourceSymbol);
+
+                this.emitter.EmitProperty("copy", () => this.emitter.EmitCopyObject(resourceSymbol.Name, @for, input: null));
+            }
+            else
+            {
+                typeReference = EmitHelpers.GetSingleResourceTypeReference(resourceSymbol);
             }
 
             this.emitter.EmitProperty("type", typeReference.FullyQualifiedType);
@@ -285,8 +298,6 @@ namespace Bicep.Core.Emit
             }
             this.emitter.EmitObjectProperties((ObjectSyntax)body, ResourcePropertiesToOmit);
 
-            // dependsOn is currently not allowed as a top-level resource property in bicep
-            // we will need to revisit this and probably merge the two if we decide to allow it
             this.EmitDependsOn(resourceSymbol);
 
             writer.WriteEndObject();
@@ -313,12 +324,28 @@ namespace Bicep.Core.Emit
                     throw new ArgumentException("Disallowed interpolation in module parameter");
                 }
 
+                // we can't just call EmitObjectProperties here because the ObjectSyntax is flatter than the structure we're generating
+                // because nested deployment parameters are objects with a single value property
                 writer.WritePropertyName(keyName);
+                writer.WriteStartObject();
+                if (propertySyntax.Value is ForSyntax @for)
                 {
-                    writer.WriteStartObject();
-                    this.emitter.EmitProperty("value", propertySyntax.Value);
-                    writer.WriteEndObject();
+                    // the value is a for-expression
+                    // write a single property copy loop
+                    this.emitter.EmitProperty("copy", () =>
+                    {
+                        writer.WriteStartArray();
+                        this.emitter.EmitCopyObject("value", @for, @for.Body, "value");
+                        writer.WriteEndArray();
+                    });
                 }
+                else
+                {
+                    // the value is not a for-expression - can emit normally
+                    this.emitter.EmitProperty("value", propertySyntax.Value);
+                }
+
+                writer.WriteEndObject();
             }
 
             writer.WriteEndObject();
@@ -329,10 +356,20 @@ namespace Bicep.Core.Emit
             writer.WriteStartObject();
 
             var body = moduleSymbol.DeclaringModule.Value;
-            if (body is IfConditionSyntax ifCondition)
+            switch (body)
             {
-                body = ifCondition.Body;
-                this.emitter.EmitProperty("condition", ifCondition.ConditionExpression);
+                case IfConditionSyntax ifCondition:
+                    body = ifCondition.Body;
+                    this.emitter.EmitProperty("condition", ifCondition.ConditionExpression);
+
+                    break;
+
+                case ForSyntax @for:
+                    body = @for.Body;
+
+                    this.emitter.EmitProperty("copy", () => this.emitter.EmitCopyObject(moduleSymbol.Name, @for, input: null));
+
+                    break;
             }
 
             this.emitter.EmitProperty("type", NestedDeploymentResourceType);
@@ -408,21 +445,41 @@ namespace Bicep.Core.Emit
             writer.WritePropertyName("dependsOn");
             writer.WriteStartArray();
             // need to put dependencies in a deterministic order to generate a deterministic template
-            foreach (var dependency in dependencies.OrderBy(x => x.Name))
+            foreach (var dependency in dependencies.OrderBy(x => x.Resource.Name))
             {
-                switch (dependency)
+                switch (dependency.Resource)
                 {
                     case ResourceSymbol resourceDependency:
+                        if (resourceDependency.IsCollection && dependency.IndexExpression == null)
+                        {
+                            // dependency is on the entire resource collection
+                            // write the name of the resource collection as the dependency
+                            writer.WriteValue(resourceDependency.DeclaringResource.Name.IdentifierName);
+
+                            break;
+                        }
+
                         if (!resourceDependency.DeclaringResource.IsExistingResource())
                         {
                             emitter.EmitResourceIdReference(resourceDependency);
                         }
+
                         break;
                     case ModuleSymbol moduleDependency:
+                        if (moduleDependency.IsCollection && dependency.IndexExpression == null)
+                        {
+                            // dependency is on the entire module collection
+                            // write the name of the module collection as the dependency
+                            writer.WriteValue(moduleDependency.DeclaringModule.Name.IdentifierName);
+
+                            break;
+                        }
+                        
                         emitter.EmitResourceIdReference(moduleDependency);
+                        
                         break;
                     default:
-                        throw new InvalidOperationException($"Found dependency '{dependency.Name}' of unexpected type {dependency.GetType()}");
+                        throw new InvalidOperationException($"Found dependency '{dependency.Resource.Name}' of unexpected type {dependency.GetType()}");
                 }
             }
             writer.WriteEndArray();

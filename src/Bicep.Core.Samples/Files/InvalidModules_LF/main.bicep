@@ -322,6 +322,7 @@ module missingFewerLoopBodyProperties 'modulea.bicep' = [for x in emptyArray:{
 
 // wrong parameter in the module loop
 module wrongModuleParameterInLoop 'modulea.bicep' = [for x in emptyArray:{
+  // #completionTest(17) -> symbolsPlusX
   name: 'hello-${x}'
   params: {
     arrayParam: []
@@ -340,73 +341,5 @@ module nonexistentArrays 'modulea.bicep' = [for evenMoreDuplicates in alsoDoesNo
     objParam: {}
     stringParamB: 'test'
     arrayParam: [for evenMoreDuplicates in totallyFake: doesNotExist]
-  }
-}]
-
-/*
-  valid loop - this should be moved to Modules_* test case after E2E works
-*/ 
-var myModules = [
-  {
-    name: 'one'
-    location: 'eastus2'
-  }
-  {
-    name: 'two'
-    location: 'westus'
-  }
-]
-
-// duplicate identifiers across scopes are allowed (inner hides the outer)
-module duplicateIdentifiersWithinLoop 'modulea.bicep' = [for x in emptyArray:{
-  name: 'hello-${x}'
-  params: {
-    objParam: {}
-    stringParamA: 'test'
-    stringParamB: 'test'
-    arrayParam: [for x in emptyArray: y]
-  }
-}]
-
-// duplicate identifiers across scopes are allowed (inner hides the outer)
-var duplicateAcrossScopes = 'hello'
-module duplicateInGlobalAndOneLoop 'modulea.bicep' = [for duplicateAcrossScopes in []: {
-  name: 'hello-${duplicateAcrossScopes}'
-  params: {
-    objParam: {}
-    stringParamA: 'test'
-    stringParamB: 'test'
-    arrayParam: [for x in emptyArray: x]
-  }
-}]
-
-var someDuplicate = true
-var otherDuplicate = false
-module duplicatesEverywhere 'modulea.bicep' = [for someDuplicate in []: {
-  name: 'hello-${someDuplicate}'
-  params: {
-    objParam: {}
-    stringParamB: 'test'
-    arrayParam: [for otherDuplicate in emptyArray: '${someDuplicate}-${otherDuplicate}']
-  }
-}]
-
-// simple module loop
-module storageResources 'modulea.bicep' = [for module in myModules: {
-  name: module.name
-  params: {
-    arrayParam: []
-    objParam: module
-    stringParamB: module.location
-  }
-}]
-
-// nested module loop
-module nestedModuleLoop 'modulea.bicep' = [for module in myModules: {
-  name: module.name
-  params: {
-    arrayParam: [for i in range(0,3): concat('test', i)]
-    objParam: module
-    stringParamB: module.location
   }
 }]

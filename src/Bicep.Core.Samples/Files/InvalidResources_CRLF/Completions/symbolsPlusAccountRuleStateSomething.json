@@ -1,20 +1,16 @@
 [
   {
-    "label": "'kind'",
-    "kind": "property",
-    "detail": "kind (Required)",
-    "documentation": {
-      "kind": "markdown",
-      "value": "Type: `'AzureCLI' | 'AzurePowerShell'`  \n"
-    },
+    "label": "account",
+    "kind": "variable",
+    "detail": "account",
     "deprecated": false,
     "preselect": false,
-    "sortText": "1_'kind'",
+    "sortText": "2_account",
     "insertTextFormat": "plainText",
     "insertTextMode": "asIs",
     "textEdit": {
       "range": {},
-      "newText": "'kind'"
+      "newText": "account"
     }
   },
   {
@@ -905,6 +901,20 @@
     "textEdit": {
       "range": {},
       "newText": "discriminatorKeyValueMissingCompletions2_if"
+    }
+  },
+  {
+    "label": "discriminatorKeyValueMissingCompletions3",
+    "kind": "variable",
+    "detail": "discriminatorKeyValueMissingCompletions3",
+    "deprecated": false,
+    "preselect": false,
+    "sortText": "2_discriminatorKeyValueMissingCompletions3",
+    "insertTextFormat": "plainText",
+    "insertTextMode": "asIs",
+    "textEdit": {
+      "range": {},
+      "newText": "discriminatorKeyValueMissingCompletions3"
     }
   },
   {
@@ -2295,20 +2305,6 @@
     }
   },
   {
-    "label": "propertyLoopsCannotNest2",
-    "kind": "interface",
-    "detail": "propertyLoopsCannotNest2",
-    "deprecated": false,
-    "preselect": false,
-    "sortText": "2_propertyLoopsCannotNest2",
-    "insertTextFormat": "plainText",
-    "insertTextMode": "asIs",
-    "textEdit": {
-      "range": {},
-      "newText": "propertyLoopsCannotNest2"
-    }
-  },
-  {
     "label": "providers",
     "kind": "function",
     "detail": "providers()",
@@ -2450,6 +2446,20 @@
     "textEdit": {
       "range": {},
       "newText": "resrefvar"
+    }
+  },
+  {
+    "label": "rule",
+    "kind": "variable",
+    "detail": "rule",
+    "deprecated": false,
+    "preselect": false,
+    "sortText": "2_rule",
+    "insertTextFormat": "plainText",
+    "insertTextMode": "asIs",
+    "textEdit": {
+      "range": {},
+      "newText": "rule"
     }
   },
   {
@@ -2960,6 +2970,20 @@
     }
   },
   {
+    "label": "something",
+    "kind": "variable",
+    "detail": "something",
+    "deprecated": false,
+    "preselect": false,
+    "sortText": "2_something",
+    "insertTextFormat": "plainText",
+    "insertTextMode": "asIs",
+    "textEdit": {
+      "range": {},
+      "newText": "something"
+    }
+  },
+  {
     "label": "split",
     "kind": "function",
     "detail": "split()",
@@ -3019,6 +3043,20 @@
     },
     "command": {
       "command": "editor.action.triggerParameterHints"
+    }
+  },
+  {
+    "label": "state",
+    "kind": "variable",
+    "detail": "state",
+    "deprecated": false,
+    "preselect": false,
+    "sortText": "2_state",
+    "insertTextFormat": "plainText",
+    "insertTextMode": "asIs",
+    "textEdit": {
+      "range": {},
+      "newText": "state"
     }
   },
   {
