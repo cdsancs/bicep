@@ -101,9 +101,8 @@ namespace Bicep.Core.Emit
 
         public void EmitResourceIdReference(ResourceSymbol resourceSymbol, SyntaxBase? indexExpression, SyntaxBase newContext)
         {
-            // TODO: Cache it
-            var dfa = new DataFlowAnalyzer(this.context.SemanticModel);
-            var inaccessibleLocals = dfa.GetInaccessibleLocalsAfterSyntaxMove(ExpressionConverter.GetResourceNameSyntax(resourceSymbol), newContext);
+            var inaccessibleLocals = this.context.DataFlowAnalyzer
+                .GetInaccessibleLocalsAfterSyntaxMove(ExpressionConverter.GetResourceNameSyntax(resourceSymbol), newContext);
 
             Debug.Assert(inaccessibleLocals.Count == (indexExpression == null ? 0 : 1), "Inaccessible locals mismatch");
             var converterForContext = this.converter;

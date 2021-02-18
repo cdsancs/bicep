@@ -7,7 +7,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using Azure.Deployments.Core.Extensions;
 using Azure.Deployments.Expression.Expressions;
-using Bicep.Core.DataFlow;
 using Bicep.Core.Extensions;
 using Bicep.Core.Resources;
 using Bicep.Core.Semantics;
@@ -21,27 +20,21 @@ namespace Bicep.Core.Emit
     {
         private readonly EmitterContext context;
 
-        private readonly ImmutableArray<LanguageExpression> activeCollectionIndexers;
-
         private readonly ImmutableDictionary<LocalVariableSymbol, LanguageExpression> localReplacements;
 
         public ExpressionConverter(EmitterContext context)
-            : this(context, ImmutableArray<LanguageExpression>.Empty, ImmutableDictionary<LocalVariableSymbol, LanguageExpression>.Empty)
+            : this(context, ImmutableDictionary<LocalVariableSymbol, LanguageExpression>.Empty)
         {
         }
 
-        private ExpressionConverter(EmitterContext context, ImmutableArray<LanguageExpression> activeCollectionIndexExpressions, ImmutableDictionary<LocalVariableSymbol, LanguageExpression> localReplacements)
+        private ExpressionConverter(EmitterContext context, ImmutableDictionary<LocalVariableSymbol, LanguageExpression> localReplacements)
         {
             this.context = context;
-            this.activeCollectionIndexers = activeCollectionIndexExpressions;
             this.localReplacements = localReplacements;
         }
 
-        public ExpressionConverter AppendActiveIndexer(LanguageExpression replacement) =>
-            new(this.context, this.activeCollectionIndexers.Add(replacement), this.localReplacements);
-
         public ExpressionConverter AppendReplacement(LocalVariableSymbol symbol, LanguageExpression replacement) =>
-            new(this.context, this.activeCollectionIndexers, this.localReplacements.Add(symbol, replacement));
+            new(this.context, this.localReplacements.Add(symbol, replacement));
 
         /// <summary>
         /// Converts the specified bicep expression tree into an ARM template expression tree.
@@ -125,13 +118,23 @@ namespace Bicep.Core.Emit
             {
                 switch (this.context.SemanticModel.GetSymbolInfo(variableAccess))
                 {
-                    case ResourceSymbol {IsCollection: true}:
+                    case ResourceSymbol {IsCollection: true} resourceSymbol:
                         var resourceIndexExpression = ConvertExpression(arrayAccess.IndexExpression);
-                        return this.AppendActiveIndexer(resourceIndexExpression).ToFunctionExpression(arrayAccess.BaseExpression);
 
-                    case ModuleSymbol { IsCollection: true }:
+                        var inaccessibleSymbols = this.context.DataFlowAnalyzer.GetInaccessibleLocalsAfterSyntaxMove(ExpressionConverter.GetResourceNameSyntax(resourceSymbol), arrayAccess);
+
+                        var converterForContext = inaccessibleSymbols.Count switch
+                        {
+                            0 => this,
+                            1 => this.AppendReplacement(inaccessibleSymbols.Single(), resourceIndexExpression),
+                            _ => throw new NotImplementedException("Too many collection indexes")
+                        };
+
+                        return converterForContext.ToFunctionExpression(arrayAccess.BaseExpression);
+
+                    case ModuleSymbol { IsCollection: true } moduleSymbol:
                         var moduleIndexExpression = ConvertExpression(arrayAccess.IndexExpression);
-                        return this.AppendActiveIndexer(moduleIndexExpression).ToFunctionExpression(arrayAccess.BaseExpression);
+                        return ToFunctionExpression(arrayAccess.BaseExpression);
                 }
             }
 
