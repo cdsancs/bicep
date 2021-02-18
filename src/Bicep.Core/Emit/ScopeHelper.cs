@@ -129,7 +129,7 @@ namespace Bicep.Core.Emit
             return null;
         }
 
-        public static LanguageExpression FormatCrossScopeResourceId(ExpressionConverter expressionConverter, ScopeData scopeData, string fullyQualifiedType, IEnumerable<LanguageExpression> nameSegments)
+        public static LanguageExpression FormatCrossScopeResourceId(ExpressionConverter expressionConverter, ScopeData scopeData, string fullyQualifiedType, IEnumerable<LanguageExpression> nameSegments, SyntaxBase newContext)
         {
             var arguments = new List<LanguageExpression>();
 
@@ -198,7 +198,7 @@ namespace Bicep.Core.Emit
                     }
 
                     return ExpressionConverter.GenerateScopedResourceId(
-                        expressionConverter.GetLocallyScopedResourceId(scopeData.ResourceScopeSymbol),
+                        expressionConverter.GetLocallyScopedResourceId(scopeData.ResourceScopeSymbol, newContext),
                         fullyQualifiedType,
                         nameSegments);
                 default:

@@ -2,10 +2,12 @@
 // Licensed under the MIT License.
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Azure.Deployments.Expression.Configuration;
 using Azure.Deployments.Expression.Expressions;
 using Azure.Deployments.Expression.Serializers;
+using Bicep.Core.DataFlow;
 using Bicep.Core.Semantics;
 using Bicep.Core.Syntax;
 using Newtonsoft.Json;
@@ -89,25 +91,36 @@ namespace Bicep.Core.Emit
             }
         }
 
-        public void EmitUnqualifiedResourceId(ResourceSymbol resourceSymbol)
+        public void EmitUnqualifiedResourceId(ResourceSymbol resourceSymbol, SyntaxBase newContext)
         {
-            var unqualifiedResourceId = converter.GetUnqualifiedResourceId(resourceSymbol);
+            var unqualifiedResourceId = converter.GetUnqualifiedResourceId(resourceSymbol, newContext);
             var serialized = ExpressionSerializer.SerializeExpression(unqualifiedResourceId);
 
             writer.WriteValue(serialized);
         }
 
-        public void EmitResourceIdReference(ResourceSymbol resourceSymbol)
+        public void EmitResourceIdReference(ResourceSymbol resourceSymbol, SyntaxBase? indexExpression, SyntaxBase newContext)
         {
-            var resourceIdExpression = converter.GetLocallyScopedResourceId(resourceSymbol);
+            // TODO: Cache it
+            var dfa = new DataFlowAnalyzer(this.context.SemanticModel);
+            var inaccessibleLocals = dfa.GetInaccessibleLocalsAfterSyntaxMove(ExpressionConverter.GetResourceNameSyntax(resourceSymbol), newContext);
+
+            Debug.Assert(inaccessibleLocals.Count == (indexExpression == null ? 0 : 1), "Inaccessible locals mismatch");
+            var converterForContext = this.converter;
+            if(indexExpression != null)
+            {
+                converterForContext = converterForContext.AppendReplacement(inaccessibleLocals.Single(), this.converter.ConvertExpression(indexExpression));
+            }
+
+            var resourceIdExpression = converterForContext.GetLocallyScopedResourceId(resourceSymbol, newContext);
             var serialized = ExpressionSerializer.SerializeExpression(resourceIdExpression);
 
             writer.WriteValue(serialized);
         }
 
-        public void EmitResourceIdReference(ModuleSymbol moduleSymbol)
+        public void EmitResourceIdReference(ModuleSymbol moduleSymbol, SyntaxBase newContext)
         {
-            var resourceIdExpression = converter.GetModuleResourceIdExpression(moduleSymbol);
+            var resourceIdExpression = converter.GetModuleResourceIdExpression(moduleSymbol, newContext);
             var serialized = ExpressionSerializer.SerializeExpression(resourceIdExpression);
 
             writer.WriteValue(serialized);

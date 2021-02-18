@@ -294,11 +294,11 @@ namespace Bicep.Core.Emit
             this.emitter.EmitProperty("apiVersion", typeReference.ApiVersion);
             if (context.SemanticModel.EmitLimitationInfo.ResourceScopeData.TryGetValue(resourceSymbol, out var scopeData) && scopeData.ResourceScopeSymbol is { } scopeResource)
             {
-                this.emitter.EmitProperty("scope", () => this.emitter.EmitUnqualifiedResourceId(scopeResource));
+                this.emitter.EmitProperty("scope", () => this.emitter.EmitUnqualifiedResourceId(scopeResource, body));
             }
             this.emitter.EmitObjectProperties((ObjectSyntax)body, ResourcePropertiesToOmit);
 
-            this.EmitDependsOn(resourceSymbol);
+            this.EmitDependsOn(resourceSymbol, body);
 
             writer.WriteEndObject();
         }
@@ -429,12 +429,12 @@ namespace Bicep.Core.Emit
                 writer.WriteEndObject();
             }
 
-            this.EmitDependsOn(moduleSymbol);
+            this.EmitDependsOn(moduleSymbol, body);
 
             writer.WriteEndObject();
         }
 
-        private void EmitDependsOn(DeclaredSymbol declaredSymbol)
+        private void EmitDependsOn(DeclaredSymbol declaredSymbol, SyntaxBase newContext)
         {
             var dependencies = context.ResourceDependencies[declaredSymbol];
             if (!dependencies.Any())
@@ -461,7 +461,7 @@ namespace Bicep.Core.Emit
 
                         if (!resourceDependency.DeclaringResource.IsExistingResource())
                         {
-                            emitter.EmitResourceIdReference(resourceDependency);
+                            emitter.EmitResourceIdReference(resourceDependency, dependency.IndexExpression, newContext);
                         }
 
                         break;
@@ -475,7 +475,7 @@ namespace Bicep.Core.Emit
                             break;
                         }
                         
-                        emitter.EmitResourceIdReference(moduleDependency);
+                        emitter.EmitResourceIdReference(moduleDependency, newContext);
                         
                         break;
                     default:
