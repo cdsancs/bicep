@@ -129,7 +129,7 @@ namespace Bicep.Core.Emit
             return null;
         }
 
-        public static LanguageExpression FormatCrossScopeResourceId(ExpressionConverter expressionConverter, ScopeData scopeData, string fullyQualifiedType, IEnumerable<LanguageExpression> nameSegments, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
+        public static LanguageExpression FormatCrossScopeResourceId(ExpressionConverter expressionConverter, ScopeData scopeData, string fullyQualifiedType, IEnumerable<LanguageExpression> nameSegments)
         {
             var arguments = new List<LanguageExpression>();
 
@@ -143,7 +143,7 @@ namespace Bicep.Core.Emit
                 case ResourceScope.Subscription:
                     if (scopeData.SubscriptionIdProperty != null)
                     {
-                        arguments.Add(expressionConverter.ConvertExpression(scopeData.SubscriptionIdProperty, localVariableResolver));
+                        arguments.Add(expressionConverter.ConvertExpression(scopeData.SubscriptionIdProperty));
                     }
                     arguments.Add(new JTokenExpression(fullyQualifiedType));
                     arguments.AddRange(nameSegments);
@@ -161,7 +161,7 @@ namespace Bicep.Core.Emit
                         else
                         {
                             var subscriptionId = new FunctionExpression("subscription", Array.Empty<LanguageExpression>(), new LanguageExpression[] { new JTokenExpression("subscriptionId") });
-                            var resourceGroup = expressionConverter.ConvertExpression(scopeData.ResourceGroupProperty, localVariableResolver);
+                            var resourceGroup = expressionConverter.ConvertExpression(scopeData.ResourceGroupProperty);
                             scope = ExpressionConverter.GenerateResourceGroupScope(subscriptionId, resourceGroup);
                         }
                     }
@@ -172,8 +172,8 @@ namespace Bicep.Core.Emit
                             throw new NotImplementedException($"Cannot format resourceId with non-null subscription and null resourceGroup");
                         }
 
-                        var subscriptionId = expressionConverter.ConvertExpression(scopeData.SubscriptionIdProperty, localVariableResolver);
-                        var resourceGroup = expressionConverter.ConvertExpression(scopeData.ResourceGroupProperty, localVariableResolver);
+                        var subscriptionId = expressionConverter.ConvertExpression(scopeData.SubscriptionIdProperty);
+                        var resourceGroup = expressionConverter.ConvertExpression(scopeData.ResourceGroupProperty);
                         scope = ExpressionConverter.GenerateResourceGroupScope(subscriptionId, resourceGroup);
                     }
 
@@ -182,7 +182,7 @@ namespace Bicep.Core.Emit
                 case ResourceScope.ManagementGroup:
                     if (scopeData.ManagementGroupNameProperty != null)
                     {
-                        var managementGroupScope = expressionConverter.GenerateManagementGroupResourceId(scopeData.ManagementGroupNameProperty, true, localVariableResolver);
+                        var managementGroupScope = expressionConverter.GenerateManagementGroupResourceId(scopeData.ManagementGroupNameProperty, true);
 
                         return ExpressionConverter.GenerateScopedResourceId(managementGroupScope, fullyQualifiedType, nameSegments);
                     }
@@ -198,7 +198,7 @@ namespace Bicep.Core.Emit
                     }
 
                     return ExpressionConverter.GenerateScopedResourceId(
-                        expressionConverter.GetLocallyScopedResourceId(scopeData.ResourceScopeSymbol, localVariableResolver),
+                        expressionConverter.GetLocallyScopedResourceId(scopeData.ResourceScopeSymbol),
                         fullyQualifiedType,
                         nameSegments);
                 default:
@@ -233,7 +233,7 @@ namespace Bicep.Core.Emit
             }
         }
 
-        public static void EmitModuleScopeProperties(ResourceScope targetScope, ScopeData scopeData, ExpressionEmitter expressionEmitter, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
+        public static void EmitModuleScopeProperties(ResourceScope targetScope, ScopeData scopeData, ExpressionEmitter expressionEmitter)
         {
             switch (scopeData.RequestedScope)
             {
@@ -245,13 +245,13 @@ namespace Bicep.Core.Emit
                     {
                         // The template engine expects an unqualified resourceId for the management group scope if deploying at tenant scope
                         var useFullyQualifiedResourceId = targetScope != ResourceScope.Tenant;
-                        expressionEmitter.EmitProperty("scope", expressionEmitter.GetManagementGroupResourceId(scopeData.ManagementGroupNameProperty, useFullyQualifiedResourceId, localVariableResolver));
+                        expressionEmitter.EmitProperty("scope", expressionEmitter.GetManagementGroupResourceId(scopeData.ManagementGroupNameProperty, useFullyQualifiedResourceId));
                     }
                     return;
                 case ResourceScope.Subscription:
                     if (scopeData.SubscriptionIdProperty != null)
                     {
-                        expressionEmitter.EmitProperty("subscriptionId", scopeData.SubscriptionIdProperty, localVariableResolver);
+                        expressionEmitter.EmitProperty("subscriptionId", scopeData.SubscriptionIdProperty);
                     }
                     else if (targetScope == ResourceScope.ResourceGroup)
                     {
@@ -261,11 +261,11 @@ namespace Bicep.Core.Emit
                 case ResourceScope.ResourceGroup:
                     if (scopeData.SubscriptionIdProperty != null)
                     {
-                        expressionEmitter.EmitProperty("subscriptionId", scopeData.SubscriptionIdProperty, localVariableResolver);
+                        expressionEmitter.EmitProperty("subscriptionId", scopeData.SubscriptionIdProperty);
                     }
                     if (scopeData.ResourceGroupProperty != null)
                     {
-                        expressionEmitter.EmitProperty("resourceGroup", scopeData.ResourceGroupProperty, localVariableResolver);
+                        expressionEmitter.EmitProperty("resourceGroup", scopeData.ResourceGroupProperty);
                     }
                     return;
                 default:

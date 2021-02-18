@@ -173,7 +173,7 @@ namespace Bicep.Core.Emit
                 {
                     if (property.TryGetKeyText() is string propertyName)
                     {
-                        this.emitter.EmitProperty(propertyName, property.Value, localVariableResolver: null);
+                        this.emitter.EmitProperty(propertyName, property.Value);
                     }
                 }
             }
@@ -189,7 +189,7 @@ namespace Bicep.Core.Emit
 
                     case ParameterDefaultValueSyntax defaultValueSyntax:
                         this.emitter.EmitProperty("type", GetTemplateTypeName(primitiveType, secure: false));
-                        this.emitter.EmitProperty("defaultValue", defaultValueSyntax.DefaultValue, localVariableResolver: null);
+                        this.emitter.EmitProperty("defaultValue", defaultValueSyntax.DefaultValue);
 
                         break;
 
@@ -202,11 +202,11 @@ namespace Bicep.Core.Emit
                         // relying on validation here as well (not all of the properties are valid in all contexts)
                         foreach (string modifierPropertyName in ParameterModifierPropertiesToEmitDirectly)
                         {
-                            this.emitter.EmitOptionalPropertyExpression(modifierPropertyName, properties.TryGetValue(modifierPropertyName), localVariableResolver: null);
+                            this.emitter.EmitOptionalPropertyExpression(modifierPropertyName, properties.TryGetValue(modifierPropertyName));
                         }
 
-                        this.emitter.EmitOptionalPropertyExpression("defaultValue", properties.TryGetValue(LanguageConstants.ParameterDefaultPropertyName), localVariableResolver: null);
-                        this.emitter.EmitOptionalPropertyExpression("allowedValues", properties.TryGetValue(LanguageConstants.ParameterAllowedPropertyName), localVariableResolver: null);
+                        this.emitter.EmitOptionalPropertyExpression("defaultValue", properties.TryGetValue(LanguageConstants.ParameterDefaultPropertyName));
+                        this.emitter.EmitOptionalPropertyExpression("allowedValues", properties.TryGetValue(LanguageConstants.ParameterAllowedPropertyName));
                         
                         break;
                 }
@@ -239,7 +239,7 @@ namespace Bicep.Core.Emit
 
         private void EmitVariable(VariableSymbol variableSymbol)
         {
-            this.emitter.EmitExpression(variableSymbol.Value, localVariableResolver: null);
+            this.emitter.EmitExpression(variableSymbol.Value);
         }
 
         private void EmitResources()
@@ -276,14 +276,14 @@ namespace Bicep.Core.Emit
                 body = ifCondition.Body;
                 typeReference = EmitHelpers.GetSingleResourceTypeReference(resourceSymbol);
 
-                this.emitter.EmitProperty("condition", ifCondition.ConditionExpression, localVariableResolver: null);
+                this.emitter.EmitProperty("condition", ifCondition.ConditionExpression);
             }
             else if (body is ForSyntax @for)
             {
                 body = @for.Body;
                 typeReference = EmitHelpers.GetResourceCollectionTypeReference(resourceSymbol);
 
-                this.emitter.EmitProperty("copy", () => this.emitter.EmitCopyObject(resourceSymbol.Name, @for, input: null, copyIndexOverride: null, localVariableResolver: null));
+                this.emitter.EmitProperty("copy", () => this.emitter.EmitCopyObject(resourceSymbol.Name, @for, input: null));
             }
             else
             {
@@ -294,16 +294,16 @@ namespace Bicep.Core.Emit
             this.emitter.EmitProperty("apiVersion", typeReference.ApiVersion);
             if (context.SemanticModel.EmitLimitationInfo.ResourceScopeData.TryGetValue(resourceSymbol, out var scopeData) && scopeData.ResourceScopeSymbol is { } scopeResource)
             {
-                this.emitter.EmitProperty("scope", () => this.emitter.EmitUnqualifiedResourceId(scopeResource, localVariableResolver: null));
+                this.emitter.EmitProperty("scope", () => this.emitter.EmitUnqualifiedResourceId(scopeResource));
             }
-            this.emitter.EmitObjectProperties((ObjectSyntax)body, ResourcePropertiesToOmit, localVariableResolver: null);
+            this.emitter.EmitObjectProperties((ObjectSyntax)body, ResourcePropertiesToOmit);
 
-            this.EmitDependsOn(resourceSymbol, localVariableResolver: null);
+            this.EmitDependsOn(resourceSymbol);
 
             writer.WriteEndObject();
         }
 
-        private void EmitModuleParameters(ModuleSymbol moduleSymbol, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
+        private void EmitModuleParameters(ModuleSymbol moduleSymbol)
         {
             var paramsValue = moduleSymbol.SafeGetBodyPropertyValue(LanguageConstants.ModuleParamsPropertyName);
             if (paramsValue is not ObjectSyntax paramsObjectSyntax)
@@ -335,14 +335,14 @@ namespace Bicep.Core.Emit
                     this.emitter.EmitProperty("copy", () =>
                     {
                         writer.WriteStartArray();
-                        this.emitter.EmitCopyObject("value", @for, @for.Body, "value", localVariableResolver);
+                        this.emitter.EmitCopyObject("value", @for, @for.Body, "value");
                         writer.WriteEndArray();
                     });
                 }
                 else
                 {
                     // the value is not a for-expression - can emit normally
-                    this.emitter.EmitProperty("value", propertySyntax.Value, localVariableResolver);
+                    this.emitter.EmitProperty("value", propertySyntax.Value);
                 }
 
                 writer.WriteEndObject();
@@ -360,14 +360,14 @@ namespace Bicep.Core.Emit
             {
                 case IfConditionSyntax ifCondition:
                     body = ifCondition.Body;
-                    this.emitter.EmitProperty("condition", ifCondition.ConditionExpression, localVariableResolver: null);
+                    this.emitter.EmitProperty("condition", ifCondition.ConditionExpression);
 
                     break;
 
                 case ForSyntax @for:
                     body = @for.Body;
 
-                    this.emitter.EmitProperty("copy", () => this.emitter.EmitCopyObject(moduleSymbol.Name, @for, input: null, copyIndexOverride: null, localVariableResolver: null));
+                    this.emitter.EmitProperty("copy", () => this.emitter.EmitCopyObject(moduleSymbol.Name, @for, input: null));
 
                     break;
             }
@@ -377,11 +377,11 @@ namespace Bicep.Core.Emit
 
             // emit all properties apart from 'params'. In practice, this currrently only allows 'name', but we may choose to allow other top-level resource properties in future.
             // params requires special handling (see below).
-            this.emitter.EmitObjectProperties((ObjectSyntax)body, ModulePropertiesToOmit, localVariableResolver: null);
+            this.emitter.EmitObjectProperties((ObjectSyntax)body, ModulePropertiesToOmit);
 
 
             var scopeData = context.ModuleScopeData[moduleSymbol];
-            ScopeHelper.EmitModuleScopeProperties(context.SemanticModel.TargetScope, scopeData, emitter, localVariableResolver: null);
+            ScopeHelper.EmitModuleScopeProperties(context.SemanticModel.TargetScope, scopeData, emitter);
 
             if (scopeData.RequestedScope != ResourceScope.ResourceGroup)
             {
@@ -417,7 +417,7 @@ namespace Bicep.Core.Emit
 
                 this.emitter.EmitProperty("mode", "Incremental");
 
-                EmitModuleParameters(moduleSymbol, localVariableResolver: null);
+                EmitModuleParameters(moduleSymbol);
 
                 writer.WritePropertyName("template");
                 {
@@ -429,12 +429,12 @@ namespace Bicep.Core.Emit
                 writer.WriteEndObject();
             }
 
-            this.EmitDependsOn(moduleSymbol, localVariableResolver: null);
+            this.EmitDependsOn(moduleSymbol);
 
             writer.WriteEndObject();
         }
 
-        private void EmitDependsOn(DeclaredSymbol declaredSymbol, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
+        private void EmitDependsOn(DeclaredSymbol declaredSymbol)
         {
             var dependencies = context.ResourceDependencies[declaredSymbol];
             if (!dependencies.Any())
@@ -461,7 +461,7 @@ namespace Bicep.Core.Emit
 
                         if (!resourceDependency.DeclaringResource.IsExistingResource())
                         {
-                            emitter.EmitResourceIdReference(resourceDependency, localVariableResolver);
+                            emitter.EmitResourceIdReference(resourceDependency);
                         }
 
                         break;
@@ -475,7 +475,7 @@ namespace Bicep.Core.Emit
                             break;
                         }
                         
-                        emitter.EmitResourceIdReference(moduleDependency, localVariableResolver);
+                        emitter.EmitResourceIdReference(moduleDependency);
                         
                         break;
                     default:
@@ -509,7 +509,7 @@ namespace Bicep.Core.Emit
             writer.WriteStartObject();
 
             this.emitter.EmitProperty("type", outputSymbol.Type.Name);
-            this.emitter.EmitProperty("value", outputSymbol.Value, localVariableResolver: null);
+            this.emitter.EmitProperty("value", outputSymbol.Value);
 
             writer.WriteEndObject();
         }

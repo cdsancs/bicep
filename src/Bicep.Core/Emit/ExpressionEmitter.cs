@@ -34,7 +34,7 @@ namespace Bicep.Core.Emit
             this.converter = new ExpressionConverter(context);
         }
 
-        public void EmitExpression(SyntaxBase syntax, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
+        public void EmitExpression(SyntaxBase syntax)
         {
             switch (syntax)
             {
@@ -53,7 +53,7 @@ namespace Bicep.Core.Emit
 
                 case ObjectSyntax objectSyntax:
                     writer.WriteStartObject();
-                    EmitObjectProperties(objectSyntax, null, localVariableResolver);
+                    EmitObjectProperties(objectSyntax);
                     writer.WriteEndObject();
 
                     break;
@@ -63,7 +63,7 @@ namespace Bicep.Core.Emit
 
                     foreach (ArrayItemSyntax itemSyntax in arraySyntax.Items)
                     {
-                        EmitExpression(itemSyntax.Value, localVariableResolver);
+                        EmitExpression(itemSyntax.Value);
                     }
 
                     writer.WriteEndArray();
@@ -80,7 +80,7 @@ namespace Bicep.Core.Emit
                 case ArrayAccessSyntax _:
                 case PropertyAccessSyntax _:
                 case VariableAccessSyntax _:
-                    EmitLanguageExpression(syntax, localVariableResolver);
+                    EmitLanguageExpression(syntax);
                     
                     break;
 
@@ -89,39 +89,39 @@ namespace Bicep.Core.Emit
             }
         }
 
-        public void EmitUnqualifiedResourceId(ResourceSymbol resourceSymbol, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
+        public void EmitUnqualifiedResourceId(ResourceSymbol resourceSymbol)
         {
-            var unqualifiedResourceId = converter.GetUnqualifiedResourceId(resourceSymbol, localVariableResolver);
+            var unqualifiedResourceId = converter.GetUnqualifiedResourceId(resourceSymbol);
             var serialized = ExpressionSerializer.SerializeExpression(unqualifiedResourceId);
 
             writer.WriteValue(serialized);
         }
 
-        public void EmitResourceIdReference(ResourceSymbol resourceSymbol, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
+        public void EmitResourceIdReference(ResourceSymbol resourceSymbol)
         {
-            var resourceIdExpression = converter.GetLocallyScopedResourceId(resourceSymbol, localVariableResolver);
+            var resourceIdExpression = converter.GetLocallyScopedResourceId(resourceSymbol);
             var serialized = ExpressionSerializer.SerializeExpression(resourceIdExpression);
 
             writer.WriteValue(serialized);
         }
 
-        public void EmitResourceIdReference(ModuleSymbol moduleSymbol, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
+        public void EmitResourceIdReference(ModuleSymbol moduleSymbol)
         {
-            var resourceIdExpression = converter.GetModuleResourceIdExpression(moduleSymbol, localVariableResolver);
+            var resourceIdExpression = converter.GetModuleResourceIdExpression(moduleSymbol);
             var serialized = ExpressionSerializer.SerializeExpression(resourceIdExpression);
 
             writer.WriteValue(serialized);
         }
 
-        public LanguageExpression GetManagementGroupResourceId(SyntaxBase managementGroupNameProperty, bool fullyQualified, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
-            => converter.GenerateManagementGroupResourceId(managementGroupNameProperty, fullyQualified, localVariableResolver);
+        public LanguageExpression GetManagementGroupResourceId(SyntaxBase managementGroupNameProperty, bool fullyQualified)
+            => converter.GenerateManagementGroupResourceId(managementGroupNameProperty, fullyQualified);
 
-        public void EmitLanguageExpression(SyntaxBase syntax, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
+        public void EmitLanguageExpression(SyntaxBase syntax)
         {
             var symbol = context.SemanticModel.GetSymbolInfo(syntax);
             if (symbol is VariableSymbol variableSymbol && context.VariablesToInline.Contains(variableSymbol))
             {
-                EmitExpression(variableSymbol.Value, localVariableResolver);
+                EmitExpression(variableSymbol.Value);
                 return;
             }
 
@@ -134,11 +134,11 @@ namespace Bicep.Core.Emit
                 // otherwise, they'd get wrapped in a json() template function call in the converted expression
 
                 // we have checks for function parameter count mismatch, which should prevent an exception from being thrown
-                EmitExpression(functionCall.Arguments.Single().Expression, localVariableResolver);
+                EmitExpression(functionCall.Arguments.Single().Expression);
                 return;
             }
 
-            LanguageExpression converted = converter.ConvertExpression(syntax, localVariableResolver);
+            LanguageExpression converted = converter.ConvertExpression(syntax);
 
             if (converted is JTokenExpression valueExpression && valueExpression.Value.Type == JTokenType.Integer)
             {
@@ -160,7 +160,7 @@ namespace Bicep.Core.Emit
             writer.WriteValue(serialized);
         }
 
-        public void EmitCopyObject(string name, ForSyntax syntax, SyntaxBase? input, string? copyIndexOverride, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
+        public void EmitCopyObject(string name, ForSyntax syntax, SyntaxBase? input, string? copyIndexOverride = null)
         {
             writer.WriteStartObject();
 
@@ -170,14 +170,13 @@ namespace Bicep.Core.Emit
             this.EmitPropertyWithTransform(
                 "count",
                 syntax.Expression,
-                arrayExpression => new FunctionExpression("length", new[] { arrayExpression }, Array.Empty<LanguageExpression>()),
-                localVariableResolver);
+                arrayExpression => new FunctionExpression("length", new[] { arrayExpression }, Array.Empty<LanguageExpression>()));
 
             if (input != null)
             {
                 if (copyIndexOverride == null)
                 {
-                    this.EmitProperty("input", input, localVariableResolver);
+                    this.EmitProperty("input", input);
                 }
                 else
                 {
@@ -198,24 +197,23 @@ namespace Bicep.Core.Emit
                                 {
                                     // it's an invocation of the copyIndex function with 1 argument with a literal value
                                     // replace the argument with the correct value
-                                    function.Parameters = new LanguageExpression[] { new JTokenExpression("value") };
+                                    function.Parameters = new LanguageExpression[] {new JTokenExpression("value")};
                                 }
                             }
                         };
 
                         // mutate the expression
                         expression.Accept(visitor);
-
+                        
                         return expression;
-                    },
-                    localVariableResolver);
+                    });
                 }
             }
 
             writer.WriteEndObject();
         }
 
-        public void EmitObjectProperties(ObjectSyntax objectSyntax, ISet<string>? propertiesToOmit, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
+        public void EmitObjectProperties(ObjectSyntax objectSyntax, ISet<string>? propertiesToOmit = null)
         {
             var propertyLookup = objectSyntax.Properties.ToLookup(property => property.Value is ForSyntax);
 
@@ -236,7 +234,7 @@ namespace Bicep.Core.Emit
                             throw new InvalidOperationException("Encountered a property with an expression-based key whose value is a for-expression.");
                         }
 
-                        this.EmitCopyObject(key, @for, @for.Body, null, localVariableResolver);
+                        this.EmitCopyObject(key, @for, @for.Body);
                     }
 
                     this.writer.WriteEndArray();
@@ -255,11 +253,11 @@ namespace Bicep.Core.Emit
                         continue;
                     }
 
-                    EmitProperty(keyName, propertySyntax.Value, localVariableResolver);
+                    EmitProperty(keyName, propertySyntax.Value);
                 }
                 else
                 {
-                    EmitProperty(propertySyntax.Key, propertySyntax.Value, localVariableResolver);
+                    EmitProperty(propertySyntax.Key, propertySyntax.Value);
                 }
             }
         }
@@ -271,10 +269,10 @@ namespace Bicep.Core.Emit
                 writer.WriteValue(propertyValue);
             });
 
-        public void EmitPropertyWithTransform(string name, SyntaxBase value, Func<LanguageExpression, LanguageExpression> convertedValueTransform, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
+        public void EmitPropertyWithTransform(string name, SyntaxBase value, Func<LanguageExpression, LanguageExpression> convertedValueTransform)
             => EmitPropertyInternal(new JTokenExpression(name), () =>
             {
-                var converted = converter.ConvertExpression(value, localVariableResolver);
+                var converted = converter.ConvertExpression(value);
                 var transformed = convertedValueTransform(converted);
                 var serialized = ExpressionSerializer.SerializeExpression(transformed);
                 
@@ -287,11 +285,11 @@ namespace Bicep.Core.Emit
         public void EmitProperty(string name, string value)
             => EmitPropertyInternal(new JTokenExpression(name), value);
 
-        public void EmitProperty(string name, SyntaxBase expressionValue, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
-            => EmitPropertyInternal(new JTokenExpression(name), expressionValue, localVariableResolver);
+        public void EmitProperty(string name, SyntaxBase expressionValue)
+            => EmitPropertyInternal(new JTokenExpression(name), expressionValue);
 
-        public void EmitProperty(SyntaxBase syntaxKey, SyntaxBase syntaxValue, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
-            => EmitPropertyInternal(converter.ConvertExpression(syntaxKey, localVariableResolver), syntaxValue, localVariableResolver);
+        public void EmitProperty(SyntaxBase syntaxKey, SyntaxBase syntaxValue)
+            => EmitPropertyInternal(converter.ConvertExpression(syntaxKey), syntaxValue);
 
         private void EmitPropertyInternal(LanguageExpression expressionKey, Action valueFunc)
         {
@@ -308,14 +306,14 @@ namespace Bicep.Core.Emit
                 writer.WriteValue(propertyValue);
             });
 
-        private void EmitPropertyInternal(LanguageExpression expressionKey, SyntaxBase syntaxValue, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
-            => EmitPropertyInternal(expressionKey, () => EmitExpression(syntaxValue, localVariableResolver));
+        private void EmitPropertyInternal(LanguageExpression expressionKey, SyntaxBase syntaxValue)
+            => EmitPropertyInternal(expressionKey, () => EmitExpression(syntaxValue));
 
-        public void EmitOptionalPropertyExpression(string name, SyntaxBase? expression, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
+        public void EmitOptionalPropertyExpression(string name, SyntaxBase? expression)
         {
             if (expression != null)
             {
-                EmitProperty(name, expression, localVariableResolver);
+                EmitProperty(name, expression);
             }
         }
     }

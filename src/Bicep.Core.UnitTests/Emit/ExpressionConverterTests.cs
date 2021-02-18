@@ -67,7 +67,7 @@ namespace Bicep.Core.UnitTests.Emit
             var variableDeclarationSyntax = programSyntax.Children.OfType<VariableDeclarationSyntax>().First();
 
             var converter = new ExpressionConverter(new EmitterContext(compilation.GetEntrypointSemanticModel()));
-            var converted = converter.ConvertExpression(variableDeclarationSyntax.Value, localVariableResolver: null);
+            var converted = converter.ConvertExpression(variableDeclarationSyntax.Value);
 
             var serializer = new ExpressionSerializer(new ExpressionSerializerSettings
             {
