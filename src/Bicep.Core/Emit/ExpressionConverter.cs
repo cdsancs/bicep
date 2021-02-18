@@ -29,7 +29,7 @@ namespace Bicep.Core.Emit
         /// The returned tree may be rooted at either a function expression or jtoken expression.
         /// </summary>
         /// <param name="expression">The expression</param>
-        public LanguageExpression ConvertExpression(SyntaxBase expression)
+        public LanguageExpression ConvertExpression(SyntaxBase expression, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
             switch (expression)
             {
@@ -42,38 +42,38 @@ namespace Bicep.Core.Emit
                 case StringSyntax stringSyntax:
                     // using the throwing method to get semantic value of the string because
                     // error checking should have caught any errors by now
-                    return ConvertString(stringSyntax);
+                    return ConvertString(stringSyntax, localVariableResolver);
 
                 case NullLiteralSyntax _:
                     return CreateFunction("null");
 
                 case ObjectSyntax @object:
-                    return ConvertObject(@object);
+                    return ConvertObject(@object, localVariableResolver);
 
                 case ArraySyntax array:
-                    return ConvertArray(array);
+                    return ConvertArray(array, localVariableResolver);
 
                 case ParenthesizedExpressionSyntax parenthesized:
                     // template expressions do not have operators so parentheses are irrelevant
-                    return ConvertExpression(parenthesized.Expression);
+                    return ConvertExpression(parenthesized.Expression, localVariableResolver);
 
                 case UnaryOperationSyntax unary:
-                    return ConvertUnary(unary);
+                    return ConvertUnary(unary, localVariableResolver);
 
                 case BinaryOperationSyntax binary:
-                    return ConvertBinary(binary);
+                    return ConvertBinary(binary, localVariableResolver);
 
                 case TernaryOperationSyntax ternary:
                     return CreateFunction(
                         "if",
-                        ConvertExpression(ternary.ConditionExpression),
-                        ConvertExpression(ternary.TrueExpression),
-                        ConvertExpression(ternary.FalseExpression));
+                        ConvertExpression(ternary.ConditionExpression, localVariableResolver),
+                        ConvertExpression(ternary.TrueExpression, localVariableResolver),
+                        ConvertExpression(ternary.FalseExpression, localVariableResolver));
 
                 case FunctionCallSyntax function:
                     return ConvertFunction(
                         function.Name.IdentifierName,
-                        function.Arguments.Select(a => ConvertExpression(a.Expression)));
+                        function.Arguments.Select(a => ConvertExpression(a.Expression, localVariableResolver)));
 
                 case InstanceFunctionCallSyntax instanceFunctionCall:
                     var namespaceSymbol = context.SemanticModel.GetSymbolInfo(instanceFunctionCall.BaseExpression);
@@ -81,23 +81,23 @@ namespace Bicep.Core.Emit
 
                     return ConvertFunction(
                         instanceFunctionCall.Name.IdentifierName,
-                        instanceFunctionCall.Arguments.Select(a => ConvertExpression(a.Expression)));
+                        instanceFunctionCall.Arguments.Select(a => ConvertExpression(a.Expression, localVariableResolver)));
 
                 case ArrayAccessSyntax arrayAccess:
-                    return ConvertArrayAccess(arrayAccess);
+                    return ConvertArrayAccess(arrayAccess, localVariableResolver);
 
                 case PropertyAccessSyntax propertyAccess:
-                    return ConvertPropertyAccess(propertyAccess);
+                    return ConvertPropertyAccess(propertyAccess, localVariableResolver);
 
                 case VariableAccessSyntax variableAccess:
-                    return ConvertVariableAccess(variableAccess);
+                    return ConvertVariableAccess(variableAccess, localVariableResolver);
 
                 default:
                     throw new NotImplementedException($"Cannot emit unexpected expression of type {expression.GetType().Name}");
             }
         }
 
-        private LanguageExpression ConvertArrayAccess(ArrayAccessSyntax arrayAccess)
+        private LanguageExpression ConvertArrayAccess(ArrayAccessSyntax arrayAccess, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
             // if there is an array access on a resource/module reference, we have to generate differently
             // when constructing the reference() function call, the resource name expression needs to have its local
@@ -108,20 +108,20 @@ namespace Bicep.Core.Emit
                 {
                     case ResourceSymbol {IsCollection: true}:
                         // TODO: Replace loop index correctly
-                        return ToFunctionExpression(arrayAccess.BaseExpression);
+                        return ToFunctionExpression(arrayAccess.BaseExpression, localVariableResolver);
 
                     case ModuleSymbol { IsCollection: true }:
                         // TODO: Replace loop index correctly
-                        return ToFunctionExpression(arrayAccess.BaseExpression);
+                        return ToFunctionExpression(arrayAccess.BaseExpression, localVariableResolver);
                 }
             }
 
             return AppendProperties(
-                ToFunctionExpression(arrayAccess.BaseExpression),
-                ConvertExpression(arrayAccess.IndexExpression));
+                ToFunctionExpression(arrayAccess.BaseExpression, localVariableResolver),
+                ConvertExpression(arrayAccess.IndexExpression, localVariableResolver));
         }
 
-        private LanguageExpression ConvertPropertyAccess(PropertyAccessSyntax propertyAccess)
+        private LanguageExpression ConvertPropertyAccess(PropertyAccessSyntax propertyAccess, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
             if (propertyAccess.BaseExpression is VariableAccessSyntax propVariableAccess &&
                 context.SemanticModel.GetSymbolInfo(propVariableAccess) is ResourceSymbol resourceSymbol)
@@ -133,16 +133,16 @@ namespace Bicep.Core.Emit
                 switch (propertyAccess.PropertyName.IdentifierName)
                 {
                     case "id":
-                        return GetLocallyScopedResourceId(resourceSymbol);
+                        return GetLocallyScopedResourceId(resourceSymbol, localVariableResolver);
                     case "name":
-                        return GetResourceNameExpression(resourceSymbol);
+                        return GetResourceNameExpression(resourceSymbol, localVariableResolver);
                     case "type":
                         return new JTokenExpression(typeReference.FullyQualifiedType);
                     case "apiVersion":
                         return new JTokenExpression(typeReference.ApiVersion);
                     case "properties":
                         // use the reference() overload without "full" to generate a shorter expression
-                        return GetReferenceExpression(resourceSymbol, typeReference, false);
+                        return GetReferenceExpression(resourceSymbol, typeReference, false, localVariableResolver);
                 }
             }
 
@@ -151,13 +151,13 @@ namespace Bicep.Core.Emit
             {
                 var (moduleSymbol, outputName) = moduleAccess.Value;
                 return AppendProperties(
-                    GetModuleOutputsReferenceExpression(moduleSymbol),
+                    GetModuleOutputsReferenceExpression(moduleSymbol, localVariableResolver),
                     new JTokenExpression(outputName),
                     new JTokenExpression("value"));
             }
 
             return AppendProperties(
-                ToFunctionExpression(propertyAccess.BaseExpression),
+                ToFunctionExpression(propertyAccess.BaseExpression, localVariableResolver),
                 new JTokenExpression(propertyAccess.PropertyName.IdentifierName));
         }
 
@@ -185,82 +185,86 @@ namespace Bicep.Core.Emit
             return null;
         }
 
-        private LanguageExpression GetResourceNameExpression(ResourceSymbol resourceSymbol)
+        
+
+        private LanguageExpression GetResourceNameExpression(ResourceSymbol resourceSymbol, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
             // this condition should have already been validated by the type checker
             var nameValueSyntax = resourceSymbol.SafeGetBodyPropertyValue(LanguageConstants.ResourceNamePropertyName) ?? throw new ArgumentException($"Expected resource syntax body to contain property 'name'");
-            return ConvertExpression(nameValueSyntax);
+
+            return ConvertExpression(nameValueSyntax, localVariableResolver);
         }
 
-        private LanguageExpression GetModuleNameExpression(ModuleSymbol moduleSymbol)
+        private LanguageExpression GetModuleNameExpression(ModuleSymbol moduleSymbol, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
             // this condition should have already been validated by the type checker
             var nameValueSyntax = moduleSymbol.SafeGetBodyPropertyValue(LanguageConstants.ResourceNamePropertyName) ?? throw new ArgumentException($"Expected module syntax body to contain property 'name'");
-            return ConvertExpression(nameValueSyntax);
+            return ConvertExpression(nameValueSyntax, localVariableResolver);
         }
 
-        public IEnumerable<LanguageExpression> GetResourceNameSegments(ResourceSymbol resourceSymbol, ResourceTypeReference typeReference)
+        public IEnumerable<LanguageExpression> GetResourceNameSegments(ResourceSymbol resourceSymbol, ResourceTypeReference typeReference, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
             if (typeReference.Types.Length == 1)
             {
-                return GetResourceNameExpression(resourceSymbol).AsEnumerable();
+                return GetResourceNameExpression(resourceSymbol, localVariableResolver).AsEnumerable();
             }
 
             return typeReference.Types.Select(
                 (type, i) => AppendProperties(
                     CreateFunction(
                         "split",
-                        GetResourceNameExpression(resourceSymbol),
+                        GetResourceNameExpression(resourceSymbol, localVariableResolver),
                         new JTokenExpression("/")),
                     new JTokenExpression(i)));
         }
 
-        private LanguageExpression GenerateScopedResourceId(ResourceSymbol resourceSymbol, ResourceScope? targetScope)
+        private LanguageExpression GenerateScopedResourceId(ResourceSymbol resourceSymbol, ResourceScope? targetScope, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
             var typeReference = resourceSymbol.IsCollection
                 ? EmitHelpers.GetResourceCollectionTypeReference(resourceSymbol)
                 : EmitHelpers.GetSingleResourceTypeReference(resourceSymbol);
-            var nameSegments = GetResourceNameSegments(resourceSymbol, typeReference);
+            var nameSegments = GetResourceNameSegments(resourceSymbol, typeReference, localVariableResolver);
 
             if (!context.ResourceScopeData.TryGetValue(resourceSymbol, out var scopeData))
             {
                 return ScopeHelper.FormatLocallyScopedResourceId(targetScope, typeReference.FullyQualifiedType, nameSegments);
             }
 
-            return ScopeHelper.FormatCrossScopeResourceId(this, scopeData, typeReference.FullyQualifiedType, nameSegments);
+            return ScopeHelper.FormatCrossScopeResourceId(this, scopeData, typeReference.FullyQualifiedType, nameSegments, localVariableResolver);
         }
 
-        public LanguageExpression GetUnqualifiedResourceId(ResourceSymbol resourceSymbol)
-            => GenerateScopedResourceId(resourceSymbol, null);
+        public LanguageExpression GetUnqualifiedResourceId(ResourceSymbol resourceSymbol, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
+            => GenerateScopedResourceId(resourceSymbol, null, localVariableResolver);
 
-        public LanguageExpression GetLocallyScopedResourceId(ResourceSymbol resourceSymbol)
-            => GenerateScopedResourceId(resourceSymbol, context.SemanticModel.TargetScope);
+        public LanguageExpression GetLocallyScopedResourceId(ResourceSymbol resourceSymbol, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
+            => GenerateScopedResourceId(resourceSymbol, context.SemanticModel.TargetScope, localVariableResolver);
 
-        public LanguageExpression GetModuleResourceIdExpression(ModuleSymbol moduleSymbol)
+        public LanguageExpression GetModuleResourceIdExpression(ModuleSymbol moduleSymbol, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
             return ScopeHelper.FormatCrossScopeResourceId(
                 this,
                 context.ModuleScopeData[moduleSymbol],
                 TemplateWriter.NestedDeploymentResourceType,
-                GetModuleNameExpression(moduleSymbol).AsEnumerable());
+                GetModuleNameExpression(moduleSymbol, localVariableResolver).AsEnumerable(),
+                localVariableResolver);
         }
 
-        public FunctionExpression GetModuleOutputsReferenceExpression(ModuleSymbol moduleSymbol)
+        public FunctionExpression GetModuleOutputsReferenceExpression(ModuleSymbol moduleSymbol, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
             => AppendProperties(
                 CreateFunction(
                     "reference",
-                    GetModuleResourceIdExpression(moduleSymbol),
+                    GetModuleResourceIdExpression(moduleSymbol, localVariableResolver),
                     new JTokenExpression(TemplateWriter.NestedDeploymentResourceApiVersion)),
                 new JTokenExpression("outputs"));
 
-        public FunctionExpression GetReferenceExpression(ResourceSymbol resourceSymbol, ResourceTypeReference typeReference, bool full)
+        public FunctionExpression GetReferenceExpression(ResourceSymbol resourceSymbol, ResourceTypeReference typeReference, bool full, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
             // full gives access to top-level resource properties, but generates a longer statement
             if (full)
             {
                 return CreateFunction(
                     "reference",
-                    GetLocallyScopedResourceId(resourceSymbol),
+                    GetLocallyScopedResourceId(resourceSymbol, localVariableResolver),
                     new JTokenExpression(typeReference.ApiVersion),
                     new JTokenExpression("full"));
             }
@@ -270,16 +274,16 @@ namespace Bicep.Core.Emit
                 // we must include an API version for an existing resource, because it cannot be inferred from any deployed template resource
                 return CreateFunction(
                     "reference",
-                    GetLocallyScopedResourceId(resourceSymbol),
+                    GetLocallyScopedResourceId(resourceSymbol, localVariableResolver),
                     new JTokenExpression(typeReference.ApiVersion));
             }
 
             return CreateFunction(
                 "reference",
-                GetLocallyScopedResourceId(resourceSymbol));
+                GetLocallyScopedResourceId(resourceSymbol, localVariableResolver));
         }
 
-        private LanguageExpression GetLocalVariableExpression(LocalVariableSymbol localVariableSymbol)
+        private LanguageExpression GetLocalVariableExpression(LocalVariableSymbol localVariableSymbol, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
             var parent = this.context.SemanticModel.Binder.GetParent(localVariableSymbol.DeclaringLocalVariable);
 
@@ -288,7 +292,7 @@ namespace Bicep.Core.Emit
                 case ForSyntax @for when ReferenceEquals(@for.ItemVariable, localVariableSymbol.DeclaringLocalVariable):
                     // this is the "item" variable of a for-expression
                     // to emit this we need to basically index the array expression by the copyIndex() function
-                    var arrayExpression = ToFunctionExpression(@for.Expression);
+                    var arrayExpression = ToFunctionExpression(@for.Expression, localVariableResolver);
 
                     var copyIndexName = this.context.SemanticModel.Binder.GetParent(@for) switch
                     {
@@ -310,7 +314,7 @@ namespace Bicep.Core.Emit
             }
         }
 
-        private LanguageExpression ConvertVariableAccess(VariableAccessSyntax variableAccessSyntax)
+        private LanguageExpression ConvertVariableAccess(VariableAccessSyntax variableAccessSyntax, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
             string name = variableAccessSyntax.Name.IdentifierName;
 
@@ -326,7 +330,7 @@ namespace Bicep.Core.Emit
                     if (context.VariablesToInline.Contains(variableSymbol))
                     {
                         // we've got a runtime dependency, so we have to inline the variable usage
-                        return ConvertExpression(variableSymbol.DeclaringVariable.Value);
+                        return ConvertExpression(variableSymbol.DeclaringVariable.Value, localVariableResolver);
                     }
                     return CreateFunction("variables", new JTokenExpression(name));
 
@@ -334,20 +338,20 @@ namespace Bicep.Core.Emit
                     var typeReference = resourceSymbol.IsCollection
                         ? EmitHelpers.GetResourceCollectionTypeReference(resourceSymbol)
                         : EmitHelpers.GetSingleResourceTypeReference(resourceSymbol);
-                    return GetReferenceExpression(resourceSymbol, typeReference, true);
+                    return GetReferenceExpression(resourceSymbol, typeReference, true, localVariableResolver);
 
                 case ModuleSymbol moduleSymbol:
-                    return GetModuleOutputsReferenceExpression(moduleSymbol);
+                    return GetModuleOutputsReferenceExpression(moduleSymbol, localVariableResolver);
 
                 case LocalVariableSymbol localVariableSymbol:
-                    return GetLocalVariableExpression(localVariableSymbol);
+                    return GetLocalVariableExpression(localVariableSymbol, localVariableResolver);
 
                 default:
                     throw new NotImplementedException($"Encountered an unexpected symbol kind '{symbol?.Kind}' when generating a variable access expression.");
             }
         }
 
-        private LanguageExpression ConvertString(StringSyntax syntax)
+        private LanguageExpression ConvertString(StringSyntax syntax, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
             if (syntax.TryGetLiteralValue() is string literalStringValue)
             {
@@ -364,7 +368,7 @@ namespace Bicep.Core.Emit
                 // There's no need for a 'format' function because we just have a single expression with no outer formatting.
                 if (syntax.StringTokens[0].Text == emptyStringOpen && syntax.StringTokens[1].Text == emptyStringClose)
                 {
-                    return ConvertExpression(syntax.Expressions[0]);
+                    return ConvertExpression(syntax.Expressions[0], localVariableResolver);
                 }
             }
 
@@ -375,7 +379,7 @@ namespace Bicep.Core.Emit
 
             for (var i = 0; i < syntax.Expressions.Length; i++)
             {
-                formatArgs[i + 1] = ConvertExpression(syntax.Expressions[i]);
+                formatArgs[i + 1] = ConvertExpression(syntax.Expressions[i], localVariableResolver);
             }
 
             return CreateFunction("format", formatArgs);
@@ -387,9 +391,9 @@ namespace Bicep.Core.Emit
         /// on literals.
         /// </summary>
         /// <param name="expression">The expression</param>
-        public FunctionExpression ToFunctionExpression(SyntaxBase expression)
+        public FunctionExpression ToFunctionExpression(SyntaxBase expression, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
-            var converted = ConvertExpression(expression);
+            var converted = ConvertExpression(expression, localVariableResolver);
             switch (converted)
             {
                 case FunctionExpression functionExpression:
@@ -448,15 +452,15 @@ namespace Bicep.Core.Emit
             return false;
         }
 
-        private FunctionExpression ConvertArray(ArraySyntax syntax)
+        private FunctionExpression ConvertArray(ArraySyntax syntax, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
             // we are using the createArray() function as a proxy for an array literal
             return CreateFunction(
                 "createArray",
-                syntax.Items.Select(item => ConvertExpression(item.Value)));
+                syntax.Items.Select(item => ConvertExpression(item.Value, localVariableResolver)));
         }
 
-        private FunctionExpression ConvertObject(ObjectSyntax syntax)
+        private FunctionExpression ConvertObject(ObjectSyntax syntax, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
             // need keys and values in one array of parameters
             var parameters = new LanguageExpression[syntax.Properties.Count() * 2];
@@ -467,12 +471,12 @@ namespace Bicep.Core.Emit
                 parameters[index] = propertySyntax.Key switch
                 {
                     IdentifierSyntax identifier => new JTokenExpression(identifier.IdentifierName),
-                    StringSyntax @string => ConvertString(@string),
+                    StringSyntax @string => ConvertString(@string, localVariableResolver),
                     _ => throw new NotImplementedException($"Encountered an unexpected type '{propertySyntax.Key.GetType().Name}' when generating object's property name.")
                 };
                 index++;
 
-                parameters[index] = ConvertExpression(propertySyntax.Value);
+                parameters[index] = ConvertExpression(propertySyntax.Value, localVariableResolver);
                 index++;
             }
 
@@ -483,10 +487,10 @@ namespace Bicep.Core.Emit
         private static FunctionExpression GetCreateObjectExpression(params LanguageExpression[] parameters)
             => CreateFunction("createObject", parameters);
 
-        private LanguageExpression ConvertBinary(BinaryOperationSyntax syntax)
+        private LanguageExpression ConvertBinary(BinaryOperationSyntax syntax, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
-            LanguageExpression operand1 = ConvertExpression(syntax.LeftExpression);
-            LanguageExpression operand2 = ConvertExpression(syntax.RightExpression);
+            LanguageExpression operand1 = ConvertExpression(syntax.LeftExpression, localVariableResolver);
+            LanguageExpression operand2 = ConvertExpression(syntax.RightExpression, localVariableResolver);
 
             switch (syntax.Operator)
             {
@@ -549,9 +553,9 @@ namespace Bicep.Core.Emit
             }
         }
 
-        private LanguageExpression ConvertUnary(UnaryOperationSyntax syntax)
+        private LanguageExpression ConvertUnary(UnaryOperationSyntax syntax, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
-            LanguageExpression convertedOperand = ConvertExpression(syntax.Expression);
+            LanguageExpression convertedOperand = ConvertExpression(syntax.Expression, localVariableResolver);
 
             switch (syntax.Operator)
             {
@@ -605,10 +609,10 @@ namespace Bicep.Core.Emit
                 "tenantResourceId",
                 new[] { new JTokenExpression(fullyQualifiedType), }.Concat(nameSegments));
 
-        public LanguageExpression GenerateManagementGroupResourceId(SyntaxBase managementGroupNameProperty, bool fullyQualified)
+        public LanguageExpression GenerateManagementGroupResourceId(SyntaxBase managementGroupNameProperty, bool fullyQualified, Func<LocalVariableSymbol, LanguageExpression>? localVariableResolver)
         {
             const string managementGroupType = "Microsoft.Management/managementGroups";
-            var managementGroupName = ConvertExpression(managementGroupNameProperty);
+            var managementGroupName = ConvertExpression(managementGroupNameProperty, localVariableResolver);
 
             if (fullyQualified)
             {
